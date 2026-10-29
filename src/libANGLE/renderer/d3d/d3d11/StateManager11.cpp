@@ -544,7 +544,8 @@ StateManager11::StateManager11(Renderer11 *renderer)
       mEmptySerial(mRenderer->generateSerial()),
       mExecutableD3D(nullptr),
       mVertexArray11(nullptr),
-      mFramebuffer11(nullptr)
+      mFramebuffer11(nullptr),
+      mCurrentContext(nullptr)
 {
     mCurDepthStencilState.depthTest                = false;
     mCurDepthStencilState.depthFunc                = GL_LESS;
@@ -676,14 +677,31 @@ void StateManager11::checkPresentPath(const gl::Context *context)
     }
 }
 
-void StateManager11::syncState(const gl::Context *context,
-                               const gl::state::DirtyBits &dirtyBits,
-                               const gl::state::ExtendedDirtyBits &extendedDirtyBits,
-                               gl::Command command)
+angle::Result StateManager11::syncState(const gl::Context *context,
+                                       const gl::state::DirtyBits &contextDirtyBits,
+                                       const gl::state::DirtyBits &bitMask,
+                                       const gl::state::ExtendedDirtyBits &contextExtendedDirtyBits,
+                                       const gl::state::ExtendedDirtyBits &extendedBitMask,
+                                       gl::Command command)
 {
+    // Contexts current on different threads share this renderer. Their EGL
+    // bindings need not change when their commands alternate on the device.
+    if (mCurrentContext != context)
+    {
+        ANGLE_TRY(onMakeCurrent(context));
+    }
+    mPendingDirtyBits |= contextDirtyBits;
+    mPendingExtendedDirtyBits |= contextExtendedDirtyBits;
+    gl::state::DirtyBits dirtyBits = mPendingDirtyBits & bitMask;
+    const gl::state::ExtendedDirtyBits extendedDirtyBits =
+        mPendingExtendedDirtyBits & extendedBitMask;
+    if (extendedDirtyBits.any())
+    {
+        dirtyBits.set(gl::state::DIRTY_BIT_EXTENDED);
+    }
     if (!dirtyBits.any())
     {
-        return;
+        return angle::Result::Continue;
     }
 
     const gl::State &state = context->getState();
@@ -994,7 +1012,11 @@ void StateManager11::syncState(const gl::Context *context,
         }
     }
 
-    // TODO(jmadill): Input layout and vertex buffer state.
+    // A clear or readback only synchronizes its own subset. Keep the rest
+    // pending so a later draw cannot reuse another context's cached objects.
+    mPendingDirtyBits &= ~dirtyBits;
+    mPendingExtendedDirtyBits &= ~extendedDirtyBits;
+    return angle::Result::Continue;
 }
 
 angle::Result StateManager11::syncBlendState(const gl::Context *context,
@@ -1535,6 +1557,9 @@ angle::Result StateManager11::onMakeCurrent(const gl::Context *context)
     mExecutableD3D = nullptr;
     mVertexArray11 = nullptr;
     mFramebuffer11 = nullptr;
+    mCurrentContext = context;
+    mPendingDirtyBits.set();
+    mPendingExtendedDirtyBits.set();
 
     return angle::Result::Continue;
 }
@@ -1683,6 +1708,9 @@ angle::Result StateManager11::ensureInitialized(const gl::Context *context)
 
 void StateManager11::deinitialize()
 {
+    mCurrentContext = nullptr;
+    mPendingDirtyBits.reset();
+    mPendingExtendedDirtyBits.reset();
     mCurrentValueAttribs.clear();
     mInputLayoutCache.clear();
     mVertexDataManager.deinitialize();

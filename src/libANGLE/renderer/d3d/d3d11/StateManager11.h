@@ -151,10 +151,12 @@ class StateManager11 final : angle::NonCopyable
 
     void deinitialize();
 
-    void syncState(const gl::Context *context,
-                   const gl::state::DirtyBits &dirtyBits,
-                   const gl::state::ExtendedDirtyBits &extendedDirtyBits,
-                   gl::Command command);
+    angle::Result syncState(const gl::Context *context,
+                            const gl::state::DirtyBits &dirtyBits,
+                            const gl::state::DirtyBits &bitMask,
+                            const gl::state::ExtendedDirtyBits &extendedDirtyBits,
+                            const gl::state::ExtendedDirtyBits &extendedBitMask,
+                            gl::Command command);
 
     void updateStencilSizeIfChanged(bool depthStencilInitialized, unsigned int stencilSize);
 
@@ -601,6 +603,9 @@ class StateManager11 final : angle::NonCopyable
     ProgramExecutableD3D *mExecutableD3D;
     VertexArray11 *mVertexArray11;
     Framebuffer11 *mFramebuffer11;
+    const gl::Context *mCurrentContext;
+    gl::state::DirtyBits mPendingDirtyBits;
+    gl::state::ExtendedDirtyBits mPendingExtendedDirtyBits;
 };
 
 }  // namespace rx

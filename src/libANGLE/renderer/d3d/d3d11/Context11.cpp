@@ -822,8 +822,8 @@ angle::Result Context11::syncState(const gl::Context *context,
                                    const gl::state::ExtendedDirtyBits extendedBitMask,
                                    gl::Command command)
 {
-    mRenderer->getStateManager()->syncState(context, dirtyBits, extendedDirtyBits, command);
-    return angle::Result::Continue;
+    return mRenderer->getStateManager()->syncState(context, dirtyBits, bitMask, extendedDirtyBits,
+                                                  extendedBitMask, command);
 }
 
 angle::Result Context11::checkDisjointQuery()
